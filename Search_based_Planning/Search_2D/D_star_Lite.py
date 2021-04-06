@@ -64,14 +64,14 @@ class DStar:
         speed_inc = 10
         on_path = self.is_on_path(rob_traj, obs_traj[obs_idx])
         # New static obstacle on path outside bubble
-        if (dist > radius and obs_curr_pos.all() == obs_prev_pos.all() and on_path): 
+        if (dist > radius and obs_curr_pos.all() == obs_prev_pos.all() and on_path):
             print("Outside bubble")
             return (True, rob_speed)  # How to deal with case when rob reaches obs before replanning is complete?
         # Inside bubble
         if (dist < radius):
             print("Inside bubble")
             # Stop and replan
-            if (obs_curr_pos.all() == obs_prev_pos.all() and on_path): 
+            if (obs_curr_pos.all() == obs_prev_pos.all() and on_path):
                 print ("Static")
                 return (True, 0)
             # Stop or change speed
@@ -80,7 +80,7 @@ class DStar:
                 rel_vel = np.subtract(rob_vel, obs_vel)
                 approaching_vel = np.dot(rel_pos, rel_vel)
                 far_fast = False
-                close_slow = False 
+                close_slow = False
                 close_fast = False
                 print("dist, approachin_vel =", dist, approaching_vel)
                 # Far away, but approaching fast
@@ -103,7 +103,7 @@ class DStar:
                     print("Approaching")
                     new_rob_speed = rob_speed + speed_inc # Can make smarter using rel_vel
                     return (False, new_rob_speed)
-        return (False, rob_speed)           
+        return (False, rob_speed)
 
     def create_traj(self, o_start, o_goal):
         traj_x = []
@@ -122,29 +122,34 @@ class DStar:
                 step = -1
             else:
                 step = 1
-            traj_x = list(range(o_start[0], o_goal[0] + step, step))  
+            traj_x = list(range(o_start[0], o_goal[0] + step, step))
             traj_y = [o_start[1]]*(abs(o_goal[0]-o_start[0]) + 1)
         obs_traj = list(zip(traj_x, traj_y))
         return obs_traj
 
-    def visualisation(self, rob_traj, obs_traj, rob_step, obs_step, rob_idx, itr, time_step=0.5):
+    def visualisation(self, rob_traj, obs_traj, rob_step, obs_step, rob_idx, itr, rob_done, obs_done, time_step=0.5):
         # vel = steps/time_step
-        # note rob_idx is the idex of the robot location at the PREVIOUS timestep
+        # note: rob_idx is the idex of the robot location at the PREVIOUS timestep
+
         if itr == 0:
             plt.plot(rob_traj[rob_idx][0], rob_traj[rob_idx][1], 'bs')
             plt.plot(obs_traj[itr*obs_step][0], obs_traj[itr*obs_step][1], 'sk')
         else:
-            if rob_idx + rob_step < len(rob_traj):
+            if rob_idx < len(rob_traj) - 1:
+                rob_step = min(int(self.calc_dist(rob_traj[rob_idx], rob_traj[-1])), rob_step)
                 rob_idx += rob_step
                 plt.plot(rob_traj[rob_idx - rob_step][0], rob_traj[rob_idx - rob_step][1], marker = 's', color = 'white')
                 plt.plot(rob_traj[rob_idx][0], rob_traj[rob_idx][1], 'bs')
+            else:
+                rob_done = True
             if itr*obs_step < len(obs_traj):
                 plt.plot(obs_traj[itr*obs_step - obs_step][0], obs_traj[itr*obs_step - obs_step][1], marker = 's', color = 'white')
                 plt.plot(obs_traj[itr*obs_step][0], obs_traj[itr*obs_step][1], 'sk')
-
+            else:
+                obs_done = True
         plt.pause(time_step)
 
-        return rob_idx
+        return rob_idx, rob_done, obs_done
 
     def run_dynamic(self):
         self.Plot.plot_grid("D* Lite")
@@ -152,16 +157,19 @@ class DStar:
         self.plot_path(self.extract_path())
         pause_time = 0.5
         # rob_step = rob_vel * time_step
-        # have not added logic to account for if rob_traj is not divisible by step_size (goal_check)
         rob_step = 2
         # obs_step = obs_vel * time_step
         obs_step = 1
+        rob_done = False
+        obs_done = False
+
+        ############################ CASES ###########################################
         # Outside bubble static, rob_step = 2, obs_step = 1
-        # static_start = (38, 29)
-        # static_goal = (38, 25)
+        static_start = (38, 29)
+        static_goal = (38, 25)
         # Inside bubble static, rob_step = 2, obs_step = 1
-        static_start = (25, 29)
-        static_goal = (25, 14)
+        # static_start = (25, 29)
+        # static_goal = (25, 14)
         # Inside bubble, danger close_fast, rob_step = 2, obs_step = 1
         # dyn_start = (25, 29)
         # dyn_goal = (25, 0)
@@ -171,15 +179,18 @@ class DStar:
         # Inside bubble, approaching, rob_step = 2, obs_step = 1
         dyn_start = (24, 29)
         dyn_goal = (24, 0)
+
+        ##############################################################################
+
         static_obs_traj = self.create_traj(static_start, static_goal)
         static_obs_traj.append(static_goal)
         dyn_obs_traj = self.create_traj(dyn_start, dyn_goal)
-        obs_traj = dyn_obs_traj
+        obs_traj = static_obs_traj
         rob_traj = self.extract_path()
         rob_idx = 0
         itr = 0
-        while itr < 50:
-            rob_idx = self.visualisation(rob_traj, obs_traj, rob_step, obs_step, rob_idx, itr, pause_time)
+        while not (rob_done and obs_done):
+            rob_idx, rob_done, obs_done = self.visualisation(rob_traj, obs_traj, rob_step, obs_step, rob_idx, itr, rob_done, obs_done, pause_time)
             itr += 1
             if (itr % 2 == 0):
                 if (itr < len(obs_traj)):
