@@ -7,6 +7,7 @@ import os
 import sys
 import math
 import matplotlib.pyplot as plt
+import matplotlib.patches as p
 import numpy as np
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
@@ -14,6 +15,11 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) +
 
 from Search_2D import plotting, env
 
+bubble_rad = 8
+dist_tol = 5
+approaching_vel_tol = 7
+speed_inc = 10
+initial_rob_step = 2
 
 class DStar:
     def __init__(self, s_start, s_goal, heuristic_type):
@@ -49,60 +55,64 @@ class DStar:
         return math.hypot(v1[0] - v2[0], v1[1] - v2[1])
 
     def dyn_col_checker(self, obs_traj, obs_idx, rob_traj, rob_idx, rob_step, pause_time):
+        # Current and previous positions of obs and rob in their trajs
         obs_curr_pos = np.asarray(obs_traj[obs_idx])
-        obs_prev_pos = np.asarray(obs_traj[obs_idx-1])
+        obs_prev_pos = np.asarray(obs_traj[obs_idx - 1])
         rob_curr_pos = np.asarray(rob_traj[rob_idx])
-        # rob_prev_pos = np.asarray(rob_traj[rob_idx - rob_step])
-        dist = self.calc_dist(obs_curr_pos, rob_curr_pos)
+        rob_prev_pos = np.asarray(rob_traj[rob_idx - 1])
+        # Current velocity vectors of obs and rob
         obs_vel = np.true_divide(np.subtract(obs_curr_pos, obs_prev_pos), pause_time)
-        # rob_vel = np.true_divide(np.subtract(rob_curr_pos, rob_prev_pos), pause_time)
-        rob_vel = np.true_divide(np.subtract(rob_curr_pos, rob_traj[rob_idx - 1]), pause_time/rob_step)
+        if rob_step == 0:
+            rob_vel = np.zeros(2)
+        else:
+            rob_vel = np.true_divide(np.subtract(rob_curr_pos, rob_prev_pos), pause_time/rob_step)
+        # Current rob speed
         rob_speed = self.calc_dist(rob_vel, (0,0))
-        radius = 8
-        dist_tol = 4
-        approaching_vel_tol = 7
-        speed_inc = 10
+        # Current distance between obs and rob
+        dist = self.calc_dist(obs_curr_pos, rob_curr_pos)  
+    
         on_path = self.is_on_path(rob_traj, obs_traj[obs_idx])
+        rel_pos = np.subtract(obs_curr_pos, rob_curr_pos)
+        rel_vel = np.subtract(rob_vel, obs_vel)
+        approaching_vel = np.dot(rel_pos, rel_vel)
+
+        # print(rob_curr_pos, rob_prev_pos, dist, approaching_vel)
+
         # New static obstacle on path outside bubble
-        if (dist > radius and obs_curr_pos.all() == obs_prev_pos.all() and on_path): 
-            print("Outside bubble")
+        if (dist > bubble_rad and obs_curr_pos.all() == obs_prev_pos.all() and on_path): 
+            print("Outside bubble, static")
             return (True, rob_speed)  # How to deal with case when rob reaches obs before replanning is complete?
         # Inside bubble
-        if (dist < radius):
+        if (dist <= bubble_rad):
             print("Inside bubble")
             # Stop and replan
             if (obs_curr_pos.all() == obs_prev_pos.all() and on_path): 
                 print ("Static")
                 return (True, 0)
-            # Stop or change speed
+            # Stop or speed up
             else:
-                rel_pos = np.subtract(obs_curr_pos, rob_curr_pos)
-                rel_vel = np.subtract(rob_vel, obs_vel)
-                approaching_vel = np.dot(rel_pos, rel_vel)
                 far_fast = False
-                close_slow = False 
-                close_fast = False
+                close = False 
                 print("dist, approachin_vel =", dist, approaching_vel)
                 # Far away, but approaching fast
                 if (dist > dist_tol and approaching_vel > approaching_vel_tol):
                     far_fast = True
-                # Close by and approaching slow
-                if (dist < dist_tol and approaching_vel > 0 and approaching_vel <= approaching_vel_tol):
-                    close_slow = True
-                # Close by and approaching fast
-                if (dist < dist_tol and approaching_vel > approaching_vel_tol):
-                    close_fast = True
+                # Close by and approaching 
+                if (dist <= dist_tol and approaching_vel > 0):
+                    close = True
                 # Danger, stop
-                if (close_slow == True or close_fast == True):
+                if (close == True):
                     print("Danger")
-                    print("close_slow = ", close_slow)
-                    print("close_fast = ", close_fast)
                     return (False, 0)
                 # Approaching, speed up
                 elif (far_fast == True):
                     print("Approaching")
                     new_rob_speed = rob_speed + speed_inc # Can make smarter using rel_vel
                     return (False, new_rob_speed)
+        # Post danger
+        if (rob_speed == 0 and approaching_vel < 0 and dist > dist_tol):
+            rob_speed = initial_rob_step/pause_time
+
         return (False, rob_speed)           
 
     def create_traj(self, o_start, o_goal):
@@ -127,66 +137,138 @@ class DStar:
         obs_traj = list(zip(traj_x, traj_y))
         return obs_traj
 
-    def visualisation(self, rob_traj, obs_traj, rob_step, obs_step, rob_idx, itr, time_step=0.5):
+    def visualisation(self, rob_traj, obs_traj, rob_step, obs_step, rob_idx, c1_prev, c2_prev, itr, rob_done, obs_done, time_step=0.5):
         # vel = steps/time_step
         # note rob_idx is the idex of the robot location at the PREVIOUS timestep
         if itr == 0:
+            c1_prev.remove()
+            c2_prev.remove()
             plt.plot(rob_traj[rob_idx][0], rob_traj[rob_idx][1], 'bs')
             plt.plot(obs_traj[itr*obs_step][0], obs_traj[itr*obs_step][1], 'sk')
+            c1 = plt.Circle((rob_traj[rob_idx][0], rob_traj[rob_idx][1]), radius = bubble_rad, edgecolor = 'b', lw = 1, facecolor = 'none')
+            c2 = plt.Circle((rob_traj[rob_idx][0], rob_traj[rob_idx][1]), radius = dist_tol, edgecolor = 'r', lw = 1, facecolor = 'none')
+            plt.gca().add_patch(c1)
+            plt.gca().add_patch(c2)
+            c1_prev = c1
+            c2_prev = c2
         else:
-            if rob_idx + rob_step < len(rob_traj):
+            if rob_idx < len(rob_traj) - 1:
+                c1_prev.remove()
+                c2_prev.remove()
+                rob_step = min(int(self.calc_dist(rob_traj[rob_idx], rob_traj[-1])), rob_step)
                 rob_idx += rob_step
-                plt.plot(rob_traj[rob_idx - rob_step][0], rob_traj[rob_idx - rob_step][1], marker = 's', color = 'white')
+                plt.plot(rob_traj[rob_idx - rob_step][0], rob_traj[rob_idx - rob_step][1], marker = 's', color = 'cyan')
                 plt.plot(rob_traj[rob_idx][0], rob_traj[rob_idx][1], 'bs')
+                c1 = plt.Circle((rob_traj[rob_idx][0], rob_traj[rob_idx][1]), radius = bubble_rad, edgecolor = 'b', lw = 1, facecolor = 'none')
+                c2 = plt.Circle((rob_traj[rob_idx][0], rob_traj[rob_idx][1]), radius = dist_tol, edgecolor = 'r', lw = 1, facecolor = 'none')
+                plt.gca().add_patch(c1)
+                plt.gca().add_patch(c2)
+                c1_prev = c1
+                c2_prev = c2
+            else:
+                rob_done = True
             if itr*obs_step < len(obs_traj):
-                plt.plot(obs_traj[itr*obs_step - obs_step][0], obs_traj[itr*obs_step - obs_step][1], marker = 's', color = 'white')
+                plt.plot(obs_traj[itr*obs_step - obs_step][0], obs_traj[itr*obs_step - obs_step][1], marker = 's', color = 'red')
                 plt.plot(obs_traj[itr*obs_step][0], obs_traj[itr*obs_step][1], 'sk')
+            else:
+                obs_done = True
 
         plt.pause(time_step)
 
-        return rob_idx
+        return rob_idx, c1_prev, c2_prev, rob_done, obs_done
 
     def run_dynamic(self):
         self.Plot.plot_grid("D* Lite")
         self.ComputePath()
         self.plot_path(self.extract_path())
-        pause_time = 0.5
-        # rob_step = rob_vel * time_step
+
         # have not added logic to account for if rob_traj is not divisible by step_size (goal_check)
+
+        pause_time = 0.5
         rob_step = 2
-        # obs_step = obs_vel * time_step
         obs_step = 1
-        # Outside bubble static, rob_step = 2, obs_step = 1
+        rob_done = False
+        obs_done = False
+
+        ############################ CASES ###########################################
+        # Outside bubble static
         # static_start = (38, 29)
         # static_goal = (38, 25)
-        # Inside bubble static, rob_step = 2, obs_step = 1
-        static_start = (25, 29)
-        static_goal = (25, 14)
-        # Inside bubble, danger close_fast, rob_step = 2, obs_step = 1
-        # dyn_start = (25, 29)
-        # dyn_goal = (25, 0)
-        # Inside bubble, danger close_slow, rob_step = 2, obs_step = 1
+        # Inside bubble static
+        static_start = (24, 29)
+        static_goal = (24, 14)
+        # Inside bubble, approaching
         # dyn_start = (22, 29)
         # dyn_goal = (22, 0)
-        # Inside bubble, approaching, rob_step = 2, obs_step = 1
+        # Inside bubble, danger
         dyn_start = (24, 29)
         dyn_goal = (24, 0)
+        ##############################################################################
+
         static_obs_traj = self.create_traj(static_start, static_goal)
         static_obs_traj.append(static_goal)
         dyn_obs_traj = self.create_traj(dyn_start, dyn_goal)
-        obs_traj = dyn_obs_traj
+        obs_traj = static_obs_traj
         rob_traj = self.extract_path()
         rob_idx = 0
-        itr = 0
-        while itr < 50:
-            rob_idx = self.visualisation(rob_traj, obs_traj, rob_step, obs_step, rob_idx, itr, pause_time)
+        itr = 0 
+        # Random previous circles (invisible) for itr = 0
+        c1_prev = plt.Circle((1,1), radius = 1)
+        c2_prev = plt.Circle((1,1), radius = 1)
+        plt.gca().add_patch(c1_prev)
+        plt.gca().add_patch(c2_prev)
+        c1_prev.set_visible(False)
+        c2_prev.set_visible(False)
+        while not (rob_done and obs_done):
+            rob_idx, c1_prev, c2_prev, rob_done, obs_done = self.visualisation(rob_traj, obs_traj, rob_step, obs_step, rob_idx, c1_prev, c2_prev, itr, rob_done, obs_done, pause_time)
             itr += 1
             if (itr % 2 == 0):
                 if (itr < len(obs_traj)):
-                    replan, new_rob_speed = self.dyn_col_checker(obs_traj, itr, rob_traj, rob_idx, rob_step, pause_time)
+                    is_replan, new_rob_speed = self.dyn_col_checker(obs_traj, itr, rob_traj, rob_idx, rob_step, pause_time)
                     rob_step = int(new_rob_speed * pause_time)
-                    print(replan, new_rob_speed)
+                    print(is_replan, new_rob_speed)
+                    if is_replan == True:
+                        new_path = self.replan(obs_traj[itr*obs_step])   
+                        rob_idx = new_path.index(rob_traj[rob_idx])
+                        rob_traj = new_path
+                        if (rob_step == 0):
+                            rob_step = initial_rob_step
         plt.show()
+
+    def replan(self, static_obs_pos):
+        x, y = static_obs_pos
+        s_curr = self.s_start
+        s_last = self.s_start
+        i = 0
+        path = [self.s_start]
+
+        while s_curr != self.s_goal:
+            s_list = {}
+
+            for s in self.get_neighbor(s_curr):
+                s_list[s] = self.g[s] + self.cost(s_curr, s)
+            s_curr = min(s_list, key=s_list.get)
+            path.append(s_curr)
+
+            if i < 1:
+                self.km += self.h(s_last, s_curr)
+                s_last = s_curr
+                self.obs.add((x, y))
+                # plt.plot(x, y, 'sk')
+                self.g[(x, y)] = float("inf")
+                self.rhs[(x, y)] = float("inf")
+                for s in self.get_neighbor((x, y)):
+                    self.UpdateVertex(s)
+                i += 1
+
+                self.count += 1
+                self.visited = set()
+                self.ComputePath()
+
+        # self.plot_visited(self.visited)
+        self.plot_path(path)
+        self.fig.canvas.draw_idle()
+        return path
 
     # def run(self):
     #     self.Plot.plot_grid("D* Lite")
@@ -201,50 +283,50 @@ class DStar:
     #     self.fig.canvas.mpl_connect('button_press_event', self.on_press)
     #     plt.show()
 
-    def on_press(self, event):
-        x, y = event.xdata, event.ydata
-        if x < 0 or x > self.x - 1 or y < 0 or y > self.y - 1:
-            print("Please choose right area!")
-        else:
-            x, y = int(x), int(y)
-            print("Change position: s =", x, ",", "y =", y)
+    # def on_press(self, event):
+    #     x, y = event.xdata, event.ydata
+    #     if x < 0 or x > self.x - 1 or y < 0 or y > self.y - 1:
+    #         print("Please choose right area!")
+    #     else:
+    #         x, y = int(x), int(y)
+    #         print("Change position: s =", x, ",", "y =", y)
 
-            s_curr = self.s_start
-            s_last = self.s_start
-            i = 0
-            path = [self.s_start]
+    #         s_curr = self.s_start
+    #         s_last = self.s_start
+    #         i = 0
+    #         path = [self.s_start]
 
-            while s_curr != self.s_goal:
-                s_list = {}
+    #         while s_curr != self.s_goal:
+    #             s_list = {}
 
-                for s in self.get_neighbor(s_curr):
-                    s_list[s] = self.g[s] + self.cost(s_curr, s)
-                s_curr = min(s_list, key=s_list.get)
-                path.append(s_curr)
+    #             for s in self.get_neighbor(s_curr):
+    #                 s_list[s] = self.g[s] + self.cost(s_curr, s)
+    #             s_curr = min(s_list, key=s_list.get)
+    #             path.append(s_curr)
 
-                if i < 1:
-                    self.km += self.h(s_last, s_curr)
-                    s_last = s_curr
-                    if (x, y) not in self.obs:
-                        self.obs.add((x, y))
-                        plt.plot(x, y, 'sk')
-                        self.g[(x, y)] = float("inf")
-                        self.rhs[(x, y)] = float("inf")
-                    else:
-                        self.obs.remove((x, y))
-                        plt.plot(x, y, marker='s', color='white')
-                        self.UpdateVertex((x, y))
-                    for s in self.get_neighbor((x, y)):
-                        self.UpdateVertex(s)
-                    i += 1
+    #             if i < 1:
+    #                 self.km += self.h(s_last, s_curr)
+    #                 s_last = s_curr
+    #                 if (x, y) not in self.obs:
+    #                     self.obs.add((x, y))
+    #                     plt.plot(x, y, 'sk')
+    #                     self.g[(x, y)] = float("inf")
+    #                     self.rhs[(x, y)] = float("inf")
+    #                 else:
+    #                     self.obs.remove((x, y))
+    #                     plt.plot(x, y, marker='s', color='white')
+    #                     self.UpdateVertex((x, y))
+    #                 for s in self.get_neighbor((x, y)):
+    #                     self.UpdateVertex(s)
+    #                 i += 1
 
-                    self.count += 1
-                    self.visited = set()
-                    self.ComputePath()
+    #                 self.count += 1
+    #                 self.visited = set()
+    #                 self.ComputePath()
 
-            self.plot_visited(self.visited)
-            self.plot_path(path)
-            self.fig.canvas.draw_idle()
+    #         self.plot_visited(self.visited)
+    #         self.plot_path(path)
+    #         self.fig.canvas.draw_idle()
 
     def ComputePath(self):
         while True:
