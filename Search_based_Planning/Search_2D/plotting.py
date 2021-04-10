@@ -68,9 +68,7 @@ class Plotting:
         plt.plot(self.xI[0], self.xI[1], "bs")
         plt.plot(self.xG[0], self.xG[1], "gs")
         plt.plot(obs_x, obs_y, "sk")
-        # plt.title(name)
-        if name == "D* Lite":
-            plt.title("Reactive D* Lite with BEV")
+        plt.title(name)
         plt.axis("equal")
         plt.axis([-5, 55, -5, 35])
 

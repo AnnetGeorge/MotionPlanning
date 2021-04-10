@@ -39,13 +39,34 @@ class Env:
             obs.add((x - 1, i))
 
         # Maze walls
+        # for i in range(10, 21):
+        #     obs.add((i, 15))
+        # for i in range(15):
+        #     obs.add((20, i))
+        # for i in range(15, 30):
+        #     obs.add((30, i))
+        # for i in range(16):
+        #     obs.add((40, i))
+
+       # Exp2 walls
         for i in range(10, 21):
             obs.add((i, 15))
         for i in range(15):
             obs.add((20, i))
-        for i in range(15, 30):
+        for i in range(5, 30):
             obs.add((30, i))
-        for i in range(16):
-            obs.add((40, i))
+
+        for i in range(31, 47):
+            obs.add((i, 15))
+
+        for i in range(5, 16):
+            obs.add((47, i))
+
+        # top line
+        for i in range(33, 36):
+            obs.add((i, 17))
+
+        for i in range(37, 48):
+            obs.add((i, 17))       
 
         return obs

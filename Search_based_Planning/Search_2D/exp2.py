@@ -63,6 +63,11 @@ class DStar:
         
     def dyn_col_checker(self, obs_traj, obs_idx, rob_traj, rob_idx, rob_step, pause_time, text_box):
         # Current and previous positions of obs and rob in their trajs
+        ############### for testing case ##################
+        if obs_idx >= len(obs_traj):
+            obs_idx = len(obs_traj) - 1
+        ####################################################
+
         obs_curr_pos = np.asarray(obs_traj[obs_idx])
         obs_prev_pos = np.asarray(obs_traj[obs_idx - 1])
         rob_curr_pos = np.asarray(rob_traj[rob_idx])
@@ -87,10 +92,10 @@ class DStar:
         # print(rob_curr_pos, rob_prev_pos, dist, approaching_vel)
 
         # New static obstacle on path outside bubble
-        if (dist > bubble_rad and np.array_equal(obs_curr_pos, obs_prev_pos) and on_path): 
-            print("Outside bubble, static")
-            self.make_textbox("New Static Obstacle: Replan", text_box)
-            return (True, rob_speed)  # How to deal with case when rob reaches obs before replanning is complete?
+        # if (dist > bubble_rad and np.array_equal(obs_curr_pos, obs_prev_pos) and on_path): 
+        #     print("Outside bubble, static")
+        #     self.make_textbox("New Static Obstacle: Replan", text_box)
+        #     return (True, rob_speed)  # How to deal with case when rob reaches obs before replanning is complete?
         # Inside bubble
         if (dist <= bubble_rad):
             print("Inside bubble")
@@ -221,7 +226,7 @@ class DStar:
         return i_min
 
     def run_dynamic(self):
-        self.Plot.plot_grid("Reactive D* Lite with BEV")
+        self.Plot.plot_grid("D* Lite without BEV")
         self.ComputePath()
         self.plot_path(self.extract_path())
         # Initialize textbox object
@@ -232,6 +237,9 @@ class DStar:
         pause_time = 0.5
         rob_step = 2
         obs_step = 1
+
+        # only for test case
+        is_replan = False
 
         ############################ CASES ###########################################
         # Outside bubble static
@@ -277,13 +285,15 @@ class DStar:
             rob_idx, c1_prev, c2_prev = self.visualisation(rob_traj, obs_traj, rob_step, obs_step, rob_idx, c1_prev, c2_prev, itr, pause_time)
             itr += 1
             if (itr % 2 == 0):
-                if (itr < len(obs_traj)):
+                # if (itr < len(obs_traj)):
+                if (not is_replan):
                     is_replan, new_rob_speed = self.dyn_col_checker(obs_traj, itr, rob_traj, rob_idx, rob_step, pause_time, text_box)
                     rob_step = int(new_rob_speed * pause_time)
                     print(is_replan, new_rob_speed)
                     if is_replan == True:
                         start_replan_time = time.time()
-                        new_path = self.replan(obs_traj[itr*obs_step]) 
+                        # hardcoded for test case
+                        new_path = self.replan(obs_traj[len(obs_traj)-1])
                         # if curr rob pos is on new path, switch to new path  
                         if rob_traj[rob_idx] in new_path:
                             rob_idx = new_path.index(rob_traj[rob_idx])
@@ -304,8 +314,7 @@ class DStar:
                         replan_time = (time.time() - start_replan_time)
                                 
         plt.close()
-
-        return len(rob_traj), replan_time
+        return (len(rob_traj)), replan_time
 
     def replan(self, static_obs_pos):
         x, y = static_obs_pos
@@ -539,7 +548,7 @@ def main():
 
     #EXP2 goal
     s_goal = (33, 16)
-    
+
     dstar = DStar(s_start, s_goal, "euclidean")
     start_time = time.time()
     path_length, replan_time = dstar.run_dynamic()
