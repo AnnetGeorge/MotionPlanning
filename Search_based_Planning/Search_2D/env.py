@@ -1,8 +1,3 @@
-"""
-Env 2D
-@author: huiming zhou
-"""
-
 
 class Env:
     def __init__(self):
@@ -67,6 +62,6 @@ class Env:
             obs.add((i, 17))
 
         for i in range(37, 48):
-            obs.add((i, 17))       
+            obs.add((i, 17))
 
         return obs

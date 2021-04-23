@@ -1,7 +1,3 @@
-"""
-D_star_Lite 2D
-@author: huiming zhou
-"""
 
 import os
 import sys
@@ -47,7 +43,7 @@ class DStar:
                 self.g[(i, j)] = float("inf")
 
         self.rhs[self.s_goal] = 0.0
-        self.U[self.s_goal] = self.CalculateKey(self.s_goal)
+        self.U[self.s_goal] = self.calculate_key(self.s_goal, self.s_start)
         self.visited = set()
         self.count = 0
         self.fig = plt.figure()
@@ -60,7 +56,7 @@ class DStar:
 
     def make_textbox(self, message, text_box):
         text_box.set_text(message)
-        
+
     def dyn_col_checker(self, obs_traj, obs_idx, rob_traj, rob_idx, rob_step, pause_time, text_box):
         # Current and previous positions of obs and rob in their trajs
         ############### for testing case ##################
@@ -82,8 +78,8 @@ class DStar:
         # Current rob speed
         rob_speed = self.calc_dist(rob_vel, (0,0))
         # Current distance between obs and rob
-        dist = self.calc_dist(obs_curr_pos, rob_curr_pos)  
-    
+        dist = self.calc_dist(obs_curr_pos, rob_curr_pos)
+
         on_path = self.is_on_path(rob_traj, obs_traj[obs_idx])
         rel_pos = np.subtract(obs_curr_pos, rob_curr_pos)
         rel_vel = np.subtract(rob_vel, obs_vel)
@@ -92,7 +88,7 @@ class DStar:
         # print(rob_curr_pos, rob_prev_pos, dist, approaching_vel)
 
         # New static obstacle on path outside bubble
-        # if (dist > bubble_rad and np.array_equal(obs_curr_pos, obs_prev_pos) and on_path): 
+        # if (dist > bubble_rad and np.array_equal(obs_curr_pos, obs_prev_pos) and on_path):
         #     print("Outside bubble, static")
         #     self.make_textbox("New Static Obstacle: Replan", text_box)
         #     return (True, rob_speed)  # How to deal with case when rob reaches obs before replanning is complete?
@@ -101,18 +97,18 @@ class DStar:
             print("Inside bubble")
             # Stop and replan
             if (np.array_equal(obs_curr_pos, obs_prev_pos) and on_path):
-                self.make_textbox("New Static Obstacle: Replan", text_box) 
+                self.make_textbox("New Static Obstacle: Replan", text_box)
                 print ("Static")
                 return (True, 0)
             # Stop or speed up
             else:
                 far_fast = False
-                close = False 
+                close = False
                 print("dist, approachin_vel =", dist, approaching_vel)
                 # Far away, but approaching fast
                 if (dist > dist_tol and approaching_vel > approaching_vel_tol):
                     far_fast = True
-                # Close by and approaching 
+                # Close by and approaching
                 if (dist <= dist_tol and approaching_vel > 0):
                     close = True
                 # Danger, stop
@@ -130,7 +126,7 @@ class DStar:
         if (rob_speed == 0 and approaching_vel < 0 and dist > dist_tol):
             rob_speed = initial_rob_step/pause_time
 
-        return (False, rob_speed)           
+        return (False, rob_speed)
 
     def create_traj(self, o_start, o_goal):
         traj_x = []
@@ -149,7 +145,7 @@ class DStar:
                 step = -1
             else:
                 step = 1
-            traj_x = list(range(o_start[0], o_goal[0] + step, step))  
+            traj_x = list(range(o_start[0], o_goal[0] + step, step))
             traj_y = [o_start[1]]*(abs(o_goal[0]-o_start[0]) + 1)
         obs_traj = list(zip(traj_x, traj_y))
         return obs_traj
@@ -170,7 +166,7 @@ class DStar:
             traj_x.append(o_start[0])
             traj_y.append(y_pos)
             i = i + 1
-        
+
         obs_traj = list(zip(traj_x, traj_y))
         return obs_traj
 
@@ -227,13 +223,13 @@ class DStar:
 
     def run_dynamic(self):
         self.Plot.plot_grid("D* Lite without BEV")
-        self.ComputePath()
-        self.plot_path(self.extract_path())
+        self.compute_path(self.s_start, self.s_goal)
+        self.plot_path(self.extract_path(self.s_start, self.s_goal))
         # Initialize textbox object
         label_patch = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
         text_box = plt.text(0, 35, "", fontsize=11,
                 verticalalignment='top', bbox = label_patch)
-    
+
         pause_time = 0.5
         rob_step = 2
         obs_step = 1
@@ -264,16 +260,16 @@ class DStar:
         dyn_start = (22, 29)
         dyn_goal = (22, 0)
         comp_traj = self.create_complex_traj(dyn_start, dyn_goal, 11)
-        
+
         ##############################################################################
 
         static_obs_traj = self.create_traj(static_start, static_goal)
         static_obs_traj.append(static_goal)
         dyn_obs_traj = self.create_traj(dyn_start, dyn_goal)
         obs_traj = static_obs_traj
-        rob_traj = self.extract_path()
+        rob_traj = self.extract_path(self.s_start, self.s_goal)
         rob_idx = 0
-        itr = 0 
+        itr = 0
         # Random previous circles (invisible) for itr = 0
         c1_prev = plt.Circle((1,1), radius = 1)
         c2_prev = plt.Circle((1,1), radius = 1)
@@ -294,7 +290,7 @@ class DStar:
                         start_replan_time = time.time()
                         # hardcoded for test case
                         new_path = self.replan(obs_traj[len(obs_traj)-1])
-                        # if curr rob pos is on new path, switch to new path  
+                        # if curr rob pos is on new path, switch to new path
                         if rob_traj[rob_idx] in new_path:
                             rob_idx = new_path.index(rob_traj[rob_idx])
                             rob_traj = new_path
@@ -303,16 +299,16 @@ class DStar:
                         # else find connecting path
                         else:
                             nearest_ind = self.find_nearest(new_path, rob_traj[rob_idx])
-                            self.myComputePath(rob_traj[rob_idx], new_path[nearest_ind])
-                            connect_path = self.my_extract_path(rob_traj[rob_idx], new_path[nearest_ind])
-                            self.my_plot_path(connect_path)
+                            self.compute_path(rob_traj[rob_idx], new_path[nearest_ind])
+                            connect_path = self.extract_path(rob_traj[rob_idx], new_path[nearest_ind])
+                            self.plot_path(connect_path, 'connecting')
                             new_path[nearest_ind:nearest_ind] = connect_path[0:-1]
                             rob_idx = new_path.index(rob_traj[rob_idx])
                             rob_traj = new_path
                             if (rob_step == 0):
                                 rob_step = initial_rob_step
                         replan_time = (time.time() - start_replan_time)
-                                
+
         plt.close()
         return (len(rob_traj)), replan_time
 
@@ -344,17 +340,17 @@ class DStar:
 
                 self.count += 1
                 self.visited = set()
-                self.ComputePath()
+                self.compute_path(self.s_start, self.s_goal)
 
         # self.plot_visited(self.visited)
         self.plot_path(path)
         self.fig.canvas.draw_idle()
         return path
 
-    def myComputePath(self, my_start, my_goal):
+    def compute_path(self, my_start, my_goal):
         while True:
             s, v = self.TopKey()
-            if v >= self.myCalculateKey(my_start, my_start) and \
+            if v >= self.calculate_key(my_start, my_start) and \
                     self.rhs[my_start] == self.g[my_start]:
                 break
 
@@ -362,33 +358,8 @@ class DStar:
             self.U.pop(s)
             self.visited.add(s)
 
-            if k_old < self.myCalculateKey(s, my_start):
-                self.U[s] = self.myCalculateKey(s, my_start)
-            # Over consistent
-            elif self.g[s] > self.rhs[s]:
-                self.g[s] = self.rhs[s]
-                for x in self.get_neighbor(s):
-                    self.UpdateVertex(x)
-            # Under consistent
-            else:
-                self.g[s] = float("inf")
-                self.UpdateVertex(s)
-                for x in self.get_neighbor(s):
-                    self.UpdateVertex(x)
-
-    def ComputePath(self):
-        while True:
-            s, v = self.TopKey()
-            if v >= self.CalculateKey(self.s_start) and \
-                    self.rhs[self.s_start] == self.g[self.s_start]:
-                break
-
-            k_old = v
-            self.U.pop(s)
-            self.visited.add(s)
-
-            if k_old < self.CalculateKey(s):
-                self.U[s] = self.CalculateKey(s)
+            if k_old < self.calculate_key(s, my_start):
+                self.U[s] = self.calculate_key(s, my_start)
             # Over consistent
             elif self.g[s] > self.rhs[s]:
                 self.g[s] = self.rhs[s]
@@ -410,14 +381,10 @@ class DStar:
             self.U.pop(s)
 
         if self.g[s] != self.rhs[s]:
-            self.U[s] = self.CalculateKey(s)
+            self.U[s] = self.calculate_key(s, self.s_start)
 
-    def myCalculateKey(self, s, my_start):
+    def calculate_key(self, s, my_start):
         return [min(self.g[s], self.rhs[s]) + self.h(my_start, s) + self.km,
-                min(self.g[s], self.rhs[s])]
-
-    def CalculateKey(self, s):
-        return [min(self.g[s], self.rhs[s]) + self.h(self.s_start, s) + self.km,
                 min(self.g[s], self.rhs[s])]
 
     def TopKey(self):
@@ -476,7 +443,7 @@ class DStar:
 
         return nei_list
 
-    def my_extract_path(self, my_start, my_goal):
+    def extract_path(self, my_start, my_goal):
         """
         Extract the path based on the PARENT set.
         :return: The planning path
@@ -497,38 +464,14 @@ class DStar:
 
         return list(path)
 
-    def extract_path(self):
-        """
-        Extract the path based on the PARENT set.
-        :return: The planning path
-        """
-
-        path = [self.s_start]
-        s = self.s_start
-
-        for k in range(100):
-            g_list = {}
-            for x in self.get_neighbor(s):
-                if not self.is_collision(s, x):
-                    g_list[x] = self.g[x]
-            s = min(g_list, key=g_list.get)
-            path.append(s)
-            if s == self.s_goal:
-                break
-
-        return list(path)
-
-    def my_plot_path(self, path):
+    def plot_path(self, path, mode='normal'):
         px = [x[0] for x in path]
         py = [x[1] for x in path]
-        plt.plot(px, py, linewidth=2, color="magenta")
-
-    def plot_path(self, path):
-        px = [x[0] for x in path]
-        py = [x[1] for x in path]
-        plt.plot(px, py, linewidth=2)
-        # plt.plot(self.s_start[0], self.s_start[1], "bs")
-        plt.plot(self.s_goal[0], self.s_goal[1], "gs")
+        if mode == 'normal':
+            plt.plot(px, py, linewidth=2)
+            plt.plot(self.s_goal[0], self.s_goal[1], "gs")
+        else:
+            plt.plot(px, py, linewidth=2, color="magenta")
 
     def plot_visited(self, visited):
         color = ['gainsboro', 'lightgray', 'silver', 'darkgray',
